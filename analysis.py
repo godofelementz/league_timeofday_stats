@@ -35,13 +35,22 @@ def get_match_ids(puuid, total_count, region):
 def get_match_data(match_id, region):
     routing = MATCH_ROUTING_MAP.get(region, 'americas')
     url = f'https://{routing}.api.riotgames.com/lol/match/v5/matches/{match_id}'
-    res = requests.get(url, headers=HEADERS)
-    if res.status_code == 429:
-        print("⚠️ Rate limit hit. Sleeping for 120 seconds...")
-        time.sleep(120)
-        return get_match_data(match_id, region)
-    res.raise_for_status()
-    return res.json()
+    try:
+        res = requests.get(url, headers=HEADERS, timeout=10)
+        if res.status_code == 429:
+            print("⚠️ Rate limit hit. Sleeping for 120 seconds...")
+            time.sleep(120)
+            return get_match_data(match_id, region)
+        elif res.status_code == 504:
+            print(f"⚠️ Gateway Timeout on match {match_id}. Retrying in 5 seconds...")
+            time.sleep(5)
+            return get_match_data(match_id, region)
+        res.raise_for_status()
+        return res.json()
+    except requests.exceptions.RequestException as e:
+        print(f"❌ Failed to fetch match {match_id}: {e}")
+        return None
+
 
 def round_hour(timestamp_ms, tz_offset):
     dt = datetime.fromtimestamp(timestamp_ms / 1000, tz=timezone.utc) + timedelta(hours=tz_offset)
