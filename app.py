@@ -2,7 +2,6 @@ from flask import Flask, render_template, request
 from analysis import analyze_player
 from datetime import datetime, timezone, timedelta
 
-
 app = Flask(__name__)
 
 @app.route('/', methods=['GET', 'POST'])
@@ -11,10 +10,14 @@ def index():
         summoner_name = request.form['summoner_name']
         tagline = request.form['tagline']
         region = request.form['region']
-        timezone = int(request.form['timezone_offset']) # Convert string to int
-        num_games = int(request.form['num_games'])  # Convert string to int
+        timezone_offset = int(request.form['timezone_offset'])  # UTC offset as int
+        num_games = int(request.form['num_games'])  # Number of games
 
-        result = analyze_player(summoner_name, tagline, region, int(timezone), int(num_games))
+        result = analyze_player(summoner_name, tagline, region, timezone_offset, num_games)
+
+        # Overwrite the default timezone label if needed
+        result["timezone"] = f"UTC{timezone_offset:+d}"
+
         return render_template('results.html', **result)
 
     return render_template('index.html')
