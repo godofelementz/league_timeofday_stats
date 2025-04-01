@@ -114,8 +114,10 @@ def analyze_sessions(df):
     )
     return summary.sort_values(by='Ranking Score', ascending=False)
 
-def analyze_hourly(df):
-    df['Hour'] = df['Start Timestamp'].apply(lambda ts: datetime.fromtimestamp(ts / 1000, tz=timezone.utc).hour)
+def analyze_hourly(df, timezone_offset):
+    df['Hour'] = df['Start Timestamp'].apply(
+        lambda ts: (datetime.fromtimestamp(ts / 1000, tz=timezone.utc) + timedelta(hours=timezone_offset)).hour
+    )
     hourly = df.groupby('Hour').agg(
         Games_Played=('Win', 'count'),
         Wins=('Win', lambda x: (x == 'Win').sum())
@@ -123,6 +125,7 @@ def analyze_hourly(df):
     hourly['Winrate (%)'] = round(100 * hourly['Wins'] / hourly['Games_Played'], 1)
     hourly['Score'] = hourly.apply(lambda row: round(row['Wins'] * log2(row['Winrate (%)'] + 1), 2), axis=1)
     return hourly.sort_values(by='Score', ascending=False)
+
 
 def analyze_lengths(df):
     rows = []
@@ -156,6 +159,16 @@ def analyze_player(name, tag, region, timezone_offset, num_games):
     df = pd.DataFrame(stats)
     df = group_sessions(df)
 
+    # Run analyses
+    hourly_stats = analyze_hourly(df, timezone_offset)
+    top_hour = analyze_hourly(df, timezone_offset).iloc[0]['Hour']
+    top_length = analyze_lengths(df).iloc[0]['Length']
+    top_gap_win = analyze_gap(df, 'Win').iloc[0]['Bucket']
+    top_gap_lose = analyze_gap(df, 'Lose').iloc[0]['Bucket']
+
+    # Format timezone display
+    timezone_display = f"{timezone_offset:+d}"
+
     print("\n📊 Match Table with Sessions:")
     print(df[['Session', 'Start Time (Rounded)', 'Win', 'Game Length (min)', 'Kills', 'Deaths', 'Assists']])
 
@@ -176,18 +189,18 @@ def analyze_player(name, tag, region, timezone_offset, num_games):
     print(session_lengths[['Length', 'Sessions', 'Games_Played', 'Total_Wins', 'Winrate (%)', 'Score']])
 
     print("\n⏰ Winrate by Hour of Day (UTC):")
-    hourly = analyze_hourly(df)
+    hourly = analyze_hourly(df, timezone_offset)
     print(hourly[['Hour', 'Games_Played', 'Wins', 'Winrate (%)', 'Score']])
 
     return {
         "summoner_name": name,
         "tagline": tag,
-        "timezone": f"UTC{int(timezone_offset):+d}",
-        "best_hour": f"{int(hourly.iloc[0]['Hour']):02d}:00",
+        "timezone": timezone_display,
+        "best_hour": f"{int(top_hour):02d}",
         "best_session_length": int(session_lengths.iloc[0]['Length']),
         "best_gap_after_win": after_win.iloc[0]['Bucket'],
         "best_gap_after_loss": after_loss.iloc[0]['Bucket'],
-        "hourly_top": hourly.head(3).to_html(index=False, classes="table table-sm table-bordered", border=0),
+        "hourly_top": analyze_hourly(df, timezone_offset).head(3).to_html(index=False, classes="table table-sm table-bordered", border=0),
         "session_lengths_top": session_lengths.head(3).to_html(index=False, classes="table table-sm table-bordered", border=0),
         "after_win_top": after_win.head(3).to_html(index=False, classes="table table-sm table-bordered", border=0),
         "after_loss_top": after_loss.head(3).to_html(index=False, classes="table table-sm table-bordered", border=0),
